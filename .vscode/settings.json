@@ -1,5 +1,14 @@
 {
+<<<<<<< HEAD
     "cSpell.words": [
         "datetimepicker"
     ]
 }
+=======
+  "editor.codeActionsOnSave": {
+    "source.fixAll": "explicit",
+    "source.organizeImports": "explicit",
+    "source.sortMembers": "explicit"
+  }
+}
+>>>>>>> ffd2e8c9404f3a117dbefb20235b968d253d2fae
