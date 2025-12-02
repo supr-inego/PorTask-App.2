@@ -1,152 +1,153 @@
 // app/data/assignments.js
-// Manages assignment data + pub/sub notifications.
+// Uses backend instead of in-memory data.
 
-import { addInstructorNotification } from "./instructorNotifications";
-import { addNotification } from "./notifications";
+import { API_BASE_URL, getAuthToken } from "../lib/apiClient";
 
-const assignments = [
-  {
-    id: 1,
-    title: "Software Engineering - Project Proposal",
-    subject: "Software Engineering",
-    deadline: "2025-10-20",
-    description: "Create a project proposal for a mobile-based system.",
-    submittedCount: 0,
-    totalStudents: 1,
-    reviewed: false,
-    category: "Assignment",
-    points: 100,
-    attachments: [], // { id, type, name, uri }
-  },
-  {
-    id: 2,
-    title: "English - Essay Writing",
-    subject: "English",
-    deadline: "2025-10-21",
-    description: "Write a 2-page reflection about IoT security challenges.",
-    submittedCount: 0,
-    totalStudents: 1,
-    reviewed: false,
-    category: "Essay",
-    points: 50,
-    attachments: [],
-  },
-  {
-    id: 3,
-    title: "Science - Lab Report",
-    subject: "Science",
-    deadline: "2025-10-27",
-    description: "Experiment report on photosynthesis observation.",
-    submittedCount: 0,
-    totalStudents: 1,
-    reviewed: false,
-    category: "Lab",
-    points: 75,
-    attachments: [],
-  },
-];
-
+// local cache + listeners (to keep same subscribe/unsubscribe pattern)
+let assignments = [];
 const listeners = new Set();
 
-export function getAssignments() {
-  return JSON.parse(JSON.stringify(assignments));
-}
-
 function notify() {
-  const snapshot = getAssignments();
+  const snapshot = JSON.parse(JSON.stringify(assignments));
   for (const l of listeners) {
     try {
       l(snapshot);
     } catch (e) {
-      console.error("Listener error:", e);
+      console.error("Assignments listener error:", e);
     }
   }
 }
 
-//  Add new assignment (supports category, points, attachments[])
-export function addAssignment(payload) {
-  const newId =
-    assignments.length > 0 ? Math.max(...assignments.map((a) => a.id)) + 1 : 1;
+async function fetchAssignments() {
+  try {
+    const token = getAuthToken();
+    if (!token) return;
 
-  const newAssignment = {
-    id: newId,
-    reviewed: false,
-    submittedCount: 0,
-    totalStudents: 1,
-    category: payload.category || "Assignment",
-    points: payload.points ?? 100,
-    attachments: payload.attachments || [],
-    ...payload,
-  };
+    const res = await fetch(`${API_BASE_URL}/api/assignments`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
 
-  assignments.push(newAssignment);
-
-  addNotification({
-    type: "new",
-    title: `New activity posted: ${newAssignment.title}`,
-    message: `Deadline: ${newAssignment.deadline}`,
-  });
-
-  notify();
-}
-
-export function toggleReviewed(id) {
-  const a = assignments.find((x) => x.id === id);
-  if (a) {
-    const wasReviewed = a.reviewed;
-    a.reviewed = !a.reviewed;
-
-    if (a.reviewed) {
-      addNotification({
-        type: "closed",
-        title: `Activity closed: ${a.title}`,
-        message: `Deadline was: ${a.deadline}`,
-      });
-
-      addInstructorNotification({
-        type: "closed",
-        title: `You closed an activity`,
-        message: `${a.title} has been marked as reviewed.`,
-      });
-    } else if (wasReviewed) {
-      addNotification({
-        type: "reopened",
-        title: `Activity reopened: ${a.title}`,
-        message: `Deadline: ${a.deadline}`,
-      });
-
-      addInstructorNotification({
-        type: "reopened",
-        title: `You reopened an activity`,
-        message: `${a.title} has been reopened for submissions.`,
-      });
+    if (!res.ok) {
+      console.log("Failed to load assignments:", await res.text());
+      return;
     }
 
+    const data = await res.json();
+    assignments = data;
     notify();
+  } catch (err) {
+    console.error("fetchAssignments error:", err);
   }
 }
 
-export function submitAssignment(id) {
-  const a = assignments.find((x) => x.id === id);
-  if (a) {
-    if (a.submittedCount < a.totalStudents) {
-      a.submittedCount += 1;
-
-      addInstructorNotification({
-        type: "submission",
-        title: `Student submitted an activity`,
-        message: `A student submitted: ${a.title}`,
-      });
-    }
-    notify();
-  }
+export function getAssignments() {
+  // returns current cache (possibly empty on first render)
+  return JSON.parse(JSON.stringify(assignments));
 }
 
 export function subscribe(listener) {
   listeners.add(listener);
   listener(getAssignments());
+
+  // if nothing yet, trigger fetch
+  if (assignments.length === 0) {
+    fetchAssignments();
+  }
 }
 
 export function unsubscribe(listener) {
   listeners.delete(listener);
+}
+
+// create assignment (instructor)
+export async function addAssignment(payload) {
+  try {
+    const token = getAuthToken();
+    if (!token) throw new Error("No auth token");
+
+    const res = await fetch(`${API_BASE_URL}/api/assignments`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || "Failed to create assignment");
+    }
+
+    const created = await res.json();
+    assignments.push(created);
+    notify();
+    return created;
+  } catch (err) {
+    console.error("addAssignment error:", err);
+    throw err;
+  }
+}
+
+// student submits
+export async function submitAssignment(id) {
+  try {
+    const token = getAuthToken();
+    if (!token) throw new Error("No auth token");
+
+    const res = await fetch(`${API_BASE_URL}/api/assignments/${id}/submit`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || "Failed to submit assignment");
+    }
+
+    const updated = await res.json();
+    assignments = assignments.map((a) => (a._id === updated._id || a.id === updated._id ? updated : a));
+    notify();
+    return updated;
+  } catch (err) {
+    console.error("submitAssignment error:", err);
+    throw err;
+  }
+}
+
+// instructor toggle reviewed
+export async function toggleReviewed(id) {
+  try {
+    const token = getAuthToken();
+    if (!token) throw new Error("No auth token");
+
+    const res = await fetch(`${API_BASE_URL}/api/assignments/${id}/review`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || "Failed to toggle reviewed");
+    }
+
+    const updated = await res.json();
+    assignments = assignments.map((a) => (a._id === updated._id || a.id === updated._id ? updated : a));
+    notify();
+    return updated;
+  } catch (err) {
+    console.error("toggleReviewed error:", err);
+    throw err;
+  }
+}
+
+// helper for screens that need fresh data on focus, if you want to call it manually
+export async function refreshAssignments() {
+  await fetchAssignments();
 }

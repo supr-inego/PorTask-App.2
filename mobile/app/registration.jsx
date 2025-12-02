@@ -8,16 +8,72 @@ import {
   TextInput,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
 } from "react-native";
+import { API_BASE_URL } from "./lib/apiClient";
 
 export default function Registration() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleRegister = () => {
-    Alert.alert("Registration Successful", "You can now log in.", [
-      { text: "OK", onPress: () => router.replace("/") },
-    ]);
+  const [fullName, setFullName] = useState("");
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleRegister = async () => {
+    if (!fullName || !username || !email || !password) {
+      Alert.alert("Missing fields", "Please fill in all fields.");
+      return;
+    }
+
+    if (username.length < 6) {
+      Alert.alert("Invalid username", "Username must be at least 6 characters.");
+      return;
+    }
+
+    if (password.length < 6) {
+      Alert.alert("Invalid password", "Password must be at least 6 characters.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username,
+          email,
+          password,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        Alert.alert("Registration error", data.message || "Failed to register.");
+        setSubmitting(false);
+        return;
+      }
+
+      // SUCCESS — Show message and send user to login
+      Alert.alert(
+        "Success",
+        "Account created successfully! Please log in.",
+        [{ text: "OK", onPress: () => router.replace("/") }]
+      );
+
+    } catch (error) {
+      console.error("Registration error:", error);
+      Alert.alert("Error", "Something went wrong. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -31,6 +87,8 @@ export default function Registration() {
             style={styles.textInput}
             placeholder="Full Name"
             placeholderTextColor="#9A9A9A"
+            value={fullName}
+            onChangeText={setFullName}
           />
         </View>
 
@@ -38,8 +96,11 @@ export default function Registration() {
           <MaterialCommunityIcons name="account-outline" size={20} color="#9A9A9A" />
           <TextInput
             style={styles.textInput}
-            placeholder="Username or Phone"
+            placeholder="Username"
             placeholderTextColor="#9A9A9A"
+            value={username}
+            autoCapitalize="none"
+            onChangeText={setUsername}
           />
         </View>
 
@@ -50,6 +111,9 @@ export default function Registration() {
             placeholder="Email"
             placeholderTextColor="#9A9A9A"
             keyboardType="email-address"
+            autoCapitalize="none"
+            value={email}
+            onChangeText={setEmail}
           />
         </View>
 
@@ -60,14 +124,24 @@ export default function Registration() {
             placeholder="Password"
             placeholderTextColor="#9A9A9A"
             secureTextEntry={!showPassword}
+            value={password}
+            onChangeText={setPassword}
           />
           <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
             <Feather name={showPassword ? "eye" : "eye-off"} size={20} color="#9A9A9A" />
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.registerButton} onPress={handleRegister}>
-          <Text style={styles.registerText}>Register</Text>
+        <TouchableOpacity
+          style={styles.registerButton}
+          onPress={handleRegister}
+          disabled={submitting}
+        >
+          {submitting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.registerText}>Register</Text>
+          )}
         </TouchableOpacity>
 
         <View style={styles.signUpRow}>

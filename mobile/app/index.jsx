@@ -9,29 +9,44 @@ import {
   TouchableOpacity,
   View,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { API_BASE_URL, setAuthToken } from "./lib/apiClient";
 
 const Index = () => {
   const router = useRouter();
 
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [role, setRole] = useState("student");
   const [loading, setLoading] = useState(true);
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const checkLogin = async () => {
       try {
+        const savedToken = await AsyncStorage.getItem("authToken");
         const savedRole = await AsyncStorage.getItem("userRole");
+        const savedEmail = await AsyncStorage.getItem("savedEmail");
 
-        if (savedRole === "student") {
-          router.replace("/(tabs)/home");
-        } else if (savedRole === "instructor") {
-          router.replace("/(instructorTabs)/home");
+        if (savedEmail) {
+          setEmail(savedEmail);
+          setRememberMe(true);
+        }
+
+        if (savedToken && savedRole) {
+          setAuthToken(savedToken);
+          if (savedRole === "student") {
+            router.replace("/(tabs)/home");
+          } else if (savedRole === "instructor") {
+            router.replace("/(instructorTabs)/home");
+          }
         }
       } catch (error) {
-        console.error("Error checking saved role:", error);
+        console.error("Error checking saved auth:", error);
       } finally {
         setLoading(false);
       }
@@ -49,15 +64,62 @@ const Index = () => {
   }
 
   const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert("Missing fields", "Please enter email and password.");
+      return;
+    }
+
     try {
-      await AsyncStorage.setItem("userRole", role);
-      if (role === "student") {
-        router.replace("/(tabs)/home");
+      setSubmitting(true);
+
+      const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const msg = data.message || "Login failed";
+        Alert.alert("Login error", msg);
+        setSubmitting(false);
+        return;
+      }
+
+      const data = await res.json();
+      const { token, user } = data;
+
+      setAuthToken(token);
+
+      await AsyncStorage.multiSet([
+        ["authToken", token],
+        ["userRole", user.role],
+        ["userData", JSON.stringify(user)],
+      ]);
+
+      if (rememberMe) {
+        await AsyncStorage.setItem("savedEmail", email);
       } else {
+        await AsyncStorage.removeItem("savedEmail");
+      }
+
+      if (user.role === "student") {
+        router.replace("/(tabs)/home");
+      } else if (user.role === "instructor") {
         router.replace("/(instructorTabs)/home");
+      } else {
+        Alert.alert(
+          "Unknown role",
+          "Your account has an unknown role. Please contact admin."
+        );
       }
     } catch (error) {
-      console.error("Error saving role:", error);
+      console.error("Error during login:", error);
+      Alert.alert("Error", "Something went wrong. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -73,14 +135,18 @@ const Index = () => {
 
         <View style={styles.inputRow}>
           <MaterialCommunityIcons
-            name="account-outline"
+            name="email-outline"
             size={20}
             color="#9A9A9A"
           />
           <TextInput
             style={styles.textInput}
-            placeholder="Username, Phone or Email"
+            placeholder="Email"
             placeholderTextColor="#9A9A9A"
+            autoCapitalize="none"
+            keyboardType="email-address"
+            value={email}
+            onChangeText={setEmail}
           />
         </View>
 
@@ -95,6 +161,8 @@ const Index = () => {
             placeholder="Password"
             placeholderTextColor="#9A9A9A"
             secureTextEntry={!showPassword}
+            value={password}
+            onChangeText={setPassword}
           />
           <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
             <Feather
@@ -124,47 +192,16 @@ const Index = () => {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.roleContainer}>
-          <Text style={styles.roleTitle}>Login as:</Text>
-          <View style={styles.roleButtons}>
-            <TouchableOpacity
-              style={[
-                styles.roleButton,
-                role === "student" && styles.roleSelected,
-              ]}
-              onPress={() => setRole("student")}
-            >
-              <Text
-                style={[
-                  styles.roleText,
-                  role === "student" && styles.roleTextSelected,
-                ]}
-              >
-                Student
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.roleButton,
-                role === "instructor" && styles.roleSelected,
-              ]}
-              onPress={() => setRole("instructor")}
-            >
-              <Text
-                style={[
-                  styles.roleText,
-                  role === "instructor" && styles.roleTextSelected,
-                ]}
-              >
-                Instructor
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-          <Text style={styles.loginText}>Log In</Text>
+        <TouchableOpacity
+          style={styles.loginButton}
+          onPress={handleLogin}
+          disabled={submitting}
+        >
+          {submitting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.loginText}>Log In</Text>
+          )}
         </TouchableOpacity>
 
         <Text style={styles.orText}>Or</Text>
@@ -248,40 +285,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "bold",
     color: "#000",
-  },
-  roleContainer: {
-    marginTop: 15,
-    width: "100%",
-    alignItems: "center",
-  },
-  roleTitle: {
-    fontSize: 14,
-    fontWeight: "bold",
-    marginBottom: 5,
-    color: "#000",
-  },
-  roleButtons: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    width: "100%",
-  },
-  roleButton: {
-    borderWidth: 1,
-    borderColor: "#3B82F6",
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 20,
-  },
-  roleSelected: {
-    backgroundColor: "#3B82F6",
-  },
-  roleText: {
-    color: "#3B82F6",
-    fontWeight: "500",
-  },
-  roleTextSelected: {
-    color: "#fff",
-    fontWeight: "bold",
   },
   loginButton: {
     backgroundColor: "#3B82F6",
