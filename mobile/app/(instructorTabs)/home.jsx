@@ -1,174 +1,286 @@
-import React, { useEffect, useState } from "react";
+// FILE: mobile/app/(instructorTabs)/home.jsx
+
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ScrollView,
   StyleSheet,
   Text,
-  View,
   TouchableOpacity,
-  LayoutAnimation,
-  Platform,
-  UIManager,
+  View,
 } from "react-native";
-
 import { useRouter } from "expo-router";
 import {
   getAssignments,
+  refreshAssignments,
   subscribe,
   unsubscribe,
-} from "../data/assignments";
-
-if (
-  Platform.OS === "android" &&
-  UIManager.setLayoutAnimationEnabledExperimental
-) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+} from "../../data/assignments";
 
 export default function InstructorHome() {
   const router = useRouter();
-  const [assignments, setAssignments] = useState(getAssignments());
-  const [expandedId, setExpandedId] = useState(null);
 
+  // assignments + filter state
+  const [assignments, setAssignments] = useState(getAssignments());
+  const [filter, setFilter] = useState("All");
+
+  // subscribe to assignments updates + refresh on mount
   useEffect(() => {
     const handler = (list) => setAssignments(list);
     subscribe(handler);
+
+    refreshAssignments().catch(() => {});
+
     return () => unsubscribe(handler);
   }, []);
 
   const todayStr = new Date().toISOString().split("T")[0];
 
-  const toggleExpand = (id) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setExpandedId((prev) => (prev === id ? null : id));
-  };
+  // active (not reviewed) assignments
+  const activeAssignments = useMemo(
+    () => assignments.filter((a) => !a.reviewed),
+    [assignments]
+  );
 
-  const getStatus = (a) => {
-    if (a.reviewed)
-      return { text: "Reviewed", bg: "#E5E7EB", color: "#374151" };
-    if (a.deadline === todayStr)
+  // dashboard counts
+  const counts = useMemo(() => {
+    const active = activeAssignments.length;
+    const reviewed = assignments.filter((a) => !!a.reviewed).length;
+    const submissions = assignments.reduce(
+      (sum, a) => sum + (a.submittedCount || 0),
+      0
+    );
+
+    return { active, reviewed, submissions };
+  }, [assignments, activeAssignments]);
+
+  // filtered list based on chip selection
+  const filtered = useMemo(() => {
+    const list = activeAssignments;
+
+    if (filter === "All") return list;
+
+    if (filter === "Today") {
+      return list.filter((a) => a.deadline === todayStr);
+    }
+
+    if (filter === "Upcoming") {
+      return list.filter((a) => a.deadline && a.deadline > todayStr);
+    }
+
+    if (filter === "Overdue") {
+      return list.filter((a) => a.deadline && a.deadline < todayStr);
+    }
+
+    return list;
+  }, [activeAssignments, filter, todayStr]);
+
+  // status pill for cards
+  const statusFor = (a) => {
+    if (a.deadline && a.deadline < todayStr) {
+      return { text: "Overdue", bg: "#FFEDD5", color: "#F97316" };
+    }
+    if (a.deadline === todayStr) {
       return { text: "Today", bg: "#DBEAFE", color: "#1D4ED8" };
-    if (a.deadline > todayStr)
-      return { text: "Upcoming", bg: "#DCFCE7", color: "#16A34A" };
-    return { text: "Overdue", bg: "#FEF3C7", color: "#B45309" };
+    }
+    return { text: "Active", bg: "#DCFCE7", color: "#16A34A" };
   };
 
   return (
     <View style={styles.container}>
-      <View style={styles.blueHeader}>
-        <Text style={styles.headerTitle}>Instructor Dashboard</Text>
-      </View>
+      <View style={styles.content}>
+        <View style={styles.rowBetween}>
+          <Text style={styles.welcome}>Welcome, Instructor!</Text>
 
-      <ScrollView
-        style={styles.contentWrapper}
-        contentContainerStyle={{ paddingBottom: 50 }}
-      >
-        {assignments.map((a) => {
-          const status = getStatus(a);
-          const expanded = expandedId === a.id;
+          <TouchableOpacity onPress={() => router.push("/instructor-all")}>
+            <Text style={styles.viewAll}>View All</Text>
+          </TouchableOpacity>
+        </View>
 
-          return (
+        {/* filter chips */}
+        <View style={styles.filterRow}>
+          {["All", "Today", "Upcoming", "Overdue"].map((f) => (
             <TouchableOpacity
-              key={String(a.id)}
-              style={styles.card}
-              onPress={() => toggleExpand(a.id)}
-              activeOpacity={0.8}
+              key={f}
+              onPress={() => setFilter(f)}
+              style={[styles.chip, filter === f && styles.chipActive]}
+              activeOpacity={0.9}
             >
-              <View style={styles.cardHeaderRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.title}>{a.title}</Text>
-                  <Text style={styles.subject}>{a.subject}</Text>
-                  <Text style={styles.deadline}>
-                    Deadline: {a.deadline}
-                  </Text>
-                </View>
-
-                <View
-                  style={[
-                    styles.statusTag,
-                    { backgroundColor: status.bg },
-                  ]}
-                >
-                  <Text style={[styles.statusText, { color: status.color }]}>
-                    {status.text}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Expanded Section */}
-              {expanded && (
-                <View style={styles.expanded}>
-                  <Text style={styles.label}>Description</Text>
-                  <Text style={styles.desc}>{a.description}</Text>
-
-                  <Text style={styles.label}>Submissions</Text>
-                  <Text style={styles.desc}>
-                    {a.submittedCount}/{a.totalStudents} submitted
-                  </Text>
-
-                  {a.attachments && a.attachments.length > 0 && (
-                    <>
-                      <Text style={styles.label}>Attachments</Text>
-                      {a.attachments.map((att, index) => (
-                        <Text
-                          key={att.id || `${a.id}-attachment-${index}`}
-                          style={styles.desc}
-                        >
-                          • {att.name}
-                        </Text>
-                      ))}
-                    </>
-                  )}
-                </View>
-              )}
+              <Text style={[styles.chipText, filter === f && styles.chipTextActive]}>
+                {f}
+              </Text>
             </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+          ))}
+        </View>
+
+        {/* summary stats */}
+        <View style={styles.statsRow}>
+          <View style={styles.statBox}>
+            <Text style={styles.statNum}>{counts.active}</Text>
+            <Text style={styles.statLabel}>Active</Text>
+          </View>
+
+          <View style={styles.statBox}>
+            <Text style={styles.statNum}>{counts.reviewed}</Text>
+            <Text style={styles.statLabel}>Reviewed</Text>
+          </View>
+
+          <View style={styles.statBox}>
+            <Text style={styles.statNum}>{counts.submissions}</Text>
+            <Text style={styles.statLabel}>Submissions</Text>
+          </View>
+        </View>
+
+        {/* list */}
+        <ScrollView
+          style={{ marginTop: 10 }}
+          contentContainerStyle={{ paddingBottom: 120 }}
+        >
+          {filtered.length === 0 ? (
+            <Text style={styles.empty}>No activities.</Text>
+          ) : (
+            filtered.map((a) => {
+              const s = statusFor(a);
+
+              return (
+                <TouchableOpacity
+                  key={String(a._id || a.id)}
+                  style={styles.card}
+                  activeOpacity={0.85}
+                  onPress={() => router.push(`/activity-details?id=${a._id}`)}
+                >
+                  <View style={styles.cardTop}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.title}>{a.title}</Text>
+                      <Text style={styles.subject}>{a.subject}</Text>
+                      <Text style={styles.deadline}>Deadline: {a.deadline}</Text>
+
+                      <Text style={styles.submissions}>
+                        Submissions: {(a.submittedCount || 0)}/
+                        {a.totalStudents || 0} submitted
+                      </Text>
+                    </View>
+
+                    <View style={[styles.tag, { backgroundColor: s.bg }]}>
+                      <Text style={[styles.tagText, { color: s.color }]}>
+                        {s.text}
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
+        </ScrollView>
+
+        {/* add activity button */}
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => router.push("/instructor-add")}
+          activeOpacity={0.9}
+        >
+          <Text style={styles.fabText}>＋</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#EAF4FF" },
-  blueHeader: {
-    backgroundColor: "#2F80ED",
-    height: 95,
-    justifyContent: "flex-end",
-    paddingBottom: 18,
+  content: { flex: 1, paddingHorizontal: 18, paddingTop: 12 },
+
+  rowBetween: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
   },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#fff",
+  welcome: { fontSize: 18, fontWeight: "800", color: "#0F172A" },
+  viewAll: { color: "#2563EB", fontWeight: "700" },
+
+  filterRow: { flexDirection: "row", marginTop: 10, gap: 8, flexWrap: "wrap" },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#E5E7EB",
   },
-  contentWrapper: { paddingHorizontal: 16, paddingTop: 10 },
-  card: {
+  chipActive: { backgroundColor: "#2563EB" },
+  chipText: { fontWeight: "700", color: "#374151", fontSize: 12 },
+  chipTextActive: { color: "#fff" },
+
+  statsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 12,
+    gap: 10,
+  },
+  statBox: {
+    flex: 1,
     backgroundColor: "#fff",
-    padding: 14,
-    borderRadius: 14,
-    marginBottom: 14,
-    borderLeftColor: "#2563EB",
-    borderLeftWidth: 4,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
   },
-  cardHeaderRow: { flexDirection: "row" },
-  title: { fontSize: 15, fontWeight: "700", color: "#0F172A" },
-  subject: { fontSize: 13, color: "#2563EB", marginTop: 2 },
-  deadline: { fontSize: 13, color: "#4B5563", marginTop: 2 },
-  statusTag: {
+  statNum: { fontSize: 18, fontWeight: "900", color: "#2563EB" },
+  statLabel: {
+    marginTop: 3,
+    fontSize: 12,
+    color: "#4B5563",
+    fontWeight: "700",
+  },
+
+  empty: {
+    textAlign: "center",
+    marginTop: 30,
+    color: "#6B7280",
+    fontStyle: "italic",
+  },
+
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 14,
+    borderLeftWidth: 4,
+    borderLeftColor: "#2563EB",
+  },
+  cardTop: { flexDirection: "row" },
+
+  title: { fontSize: 16, fontWeight: "800", color: "#0F172A" },
+  subject: { color: "#2563EB", marginTop: 2, fontSize: 13 },
+  deadline: { color: "#4B5563", fontSize: 13, marginTop: 4 },
+  submissions: {
+    color: "#4B5563",
+    fontSize: 12,
+    marginTop: 4,
+    fontWeight: "700",
+  },
+
+  tag: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 20,
+    borderRadius: 999,
     height: 25,
     justifyContent: "center",
+    marginLeft: 10,
   },
-  statusText: { fontSize: 12, fontWeight: "600" },
-  expanded: {
-    marginTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: "#E5E7EB",
-    paddingTop: 8,
+  tagText: { fontSize: 12, fontWeight: "800" },
+
+  fab: {
+    position: "absolute",
+    right: 18,
+    bottom: 18,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: "#2563EB",
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 6,
   },
-  label: { fontSize: 13, fontWeight: "700", color: "#374151", marginTop: 8 },
-  desc: { fontSize: 13, color: "#4B5563", marginTop: 2 },
+  fabText: { color: "#fff", fontSize: 28, fontWeight: "900", marginTop: -2 },
 });

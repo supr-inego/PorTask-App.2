@@ -1,19 +1,24 @@
+// FILE: mobile/app/(instructorTabs)/notification.jsx
+
 import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import {
   getInstructorNotifications,
+  refreshInstructorNotifications,
   subscribeInstructorNotifications,
   unsubscribeInstructorNotifications,
-} from "../data/instructorNotifications";
+} from "../../data/instructorNotifications";
 
 export default function InstructorNotification() {
-  const [notifications, setNotifications] = useState(
-    getInstructorNotifications()
-  );
+  const [notifications, setNotifications] = useState(getInstructorNotifications());
 
+  // subscribe to instructor notifications updates
   useEffect(() => {
     const handler = (list) => setNotifications(list);
+
     subscribeInstructorNotifications(handler);
+    refreshInstructorNotifications().catch(() => {});
+
     return () => unsubscribeInstructorNotifications(handler);
   }, []);
 
@@ -25,11 +30,18 @@ export default function InstructorNotification() {
       {notifications.length === 0 ? (
         <Text style={styles.empty}>No notifications yet</Text>
       ) : (
-        notifications.map((n) => (
-          <View key={n.id} style={styles.card}>
+        notifications.map((n, idx) => (
+          <View
+            key={String(n._id || n.id || `${n.date || ""}-${idx}`)}
+            style={styles.card}
+          >
             <Text style={styles.title}>{n.title}</Text>
+
             <Text style={styles.subtitle}>{n.message}</Text>
-            <Text style={styles.date}>{new Date(n.date).toLocaleString()}</Text>
+
+            <Text style={styles.date}>
+              {n.date ? new Date(n.date).toLocaleString() : ""}
+            </Text>
           </View>
         ))
       )}

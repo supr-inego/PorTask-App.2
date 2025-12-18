@@ -1,36 +1,38 @@
-// app/(instructorTabs)/calendar.jsx
-// 📌 InstructorCalendar.jsx
-// 🗓️ This screen allows instructors to view all active assignments on a calendar.
+// FILE: mobile/app/(instructorTabs)/calendar.jsx
 
 import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { Calendar } from "react-native-calendars";
-import { getAssignments, subscribe, unsubscribe } from "../data/assignments";
+import { getAssignments, subscribe, unsubscribe } from "../../data/assignments";
 
 export default function InstructorCalendar() {
   const [assignments, setAssignments] = useState(getAssignments());
   const [selectedDate, setSelectedDate] = useState(null);
 
+  // subscribe to assignments updates
   useEffect(() => {
     const handler = (list) => setAssignments(list);
     subscribe(handler);
     return () => unsubscribe(handler);
   }, []);
 
+  // only show active assignments on calendar
   const activeAssignments = assignments.filter((a) => !a.reviewed);
 
+  // marked dates for calendar dots
   const markedDates = {};
   activeAssignments.forEach((a) => {
-    if (a.deadline) {
-      markedDates[a.deadline] = {
-        marked: true,
-        dotColor: "#2F80ED",
-        selected: a.deadline === selectedDate,
-        selectedColor: "#2F80ED",
-      };
-    }
+    if (!a.deadline) return;
+
+    markedDates[a.deadline] = {
+      marked: true,
+      dotColor: "#2F80ED",
+      selected: a.deadline === selectedDate,
+      selectedColor: "#2F80ED",
+    };
   });
 
+  // list for selected date
   const assignmentsForSelectedDate = selectedDate
     ? activeAssignments.filter((a) => a.deadline === selectedDate)
     : [];
@@ -56,8 +58,9 @@ export default function InstructorCalendar() {
           assignmentsForSelectedDate.length > 0 ? (
             <>
               <Text style={styles.title}>Activities on {selectedDate}</Text>
+
               {assignmentsForSelectedDate.map((a) => (
-                <View key={a.id} style={styles.itemCard}>
+                <View key={String(a._id || a.id)} style={styles.itemCard}>
                   <Text style={styles.itemTitle}>{a.title}</Text>
                   <Text style={styles.itemSubject}>{a.subject}</Text>
                   <Text style={styles.itemDesc}>{a.description}</Text>
@@ -70,9 +73,7 @@ export default function InstructorCalendar() {
             </Text>
           )
         ) : (
-          <Text style={styles.noActivities}>
-            Select a date to view activities
-          </Text>
+          <Text style={styles.noActivities}>Select a date to view activities</Text>
         )}
       </ScrollView>
     </View>
@@ -81,13 +82,16 @@ export default function InstructorCalendar() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#EAF4FF", padding: 12 },
+
   info: {
     marginTop: 12,
     backgroundColor: "#fff",
     padding: 14,
     borderRadius: 10,
   },
+
   title: { fontWeight: "700", marginBottom: 8, fontSize: 16 },
+
   itemCard: {
     backgroundColor: "#F2F6FF",
     borderRadius: 8,
@@ -97,6 +101,7 @@ const styles = StyleSheet.create({
   itemTitle: { fontWeight: "700", color: "#0B1220" },
   itemSubject: { color: "#2F80ED", marginBottom: 4, fontSize: 13 },
   itemDesc: { color: "#444" },
+
   noActivities: {
     color: "#555",
     fontStyle: "italic",

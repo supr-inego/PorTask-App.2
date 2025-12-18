@@ -1,12 +1,21 @@
+// FILE: mobile/app/instructor-activities.jsx
+
 import React, { useEffect, useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { useRouter } from "expo-router";
-import { getAssignments, subscribe, unsubscribe } from "./data/assignments";
+import { subscribe, unsubscribe } from "../data/assignments";
 
 export default function InstructorActivities() {
   const router = useRouter();
   const [assignments, setAssignments] = useState([]);
 
+  // listen for assignments updates
   useEffect(() => {
     const handler = (list) => setAssignments(list);
     subscribe(handler);
@@ -15,14 +24,16 @@ export default function InstructorActivities() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
+      {/* header */}
       <View style={styles.headerRow}>
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
 
         <Text style={styles.headerTitle}>All Activities</Text>
-        <View style={{ width: 50 }} /> 
+
+        {/* spacer to keep title centered */}
+        <View style={{ width: 50 }} />
       </View>
 
       <ScrollView
@@ -48,7 +59,7 @@ const styles = StyleSheet.create({
     paddingTop: 50,
   },
 
-  /** HEADER */
+  // header
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -67,7 +78,7 @@ const styles = StyleSheet.create({
     color: "#0B1220",
   },
 
-  /** CARDS */
+  // cards
   card: {
     backgroundColor: "#fff",
     padding: 16,

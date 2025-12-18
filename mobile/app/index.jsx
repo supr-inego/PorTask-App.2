@@ -1,30 +1,37 @@
+// FILE: mobile/app/index.jsx
+
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Image,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  ActivityIndicator,
-  Alert,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { API_BASE_URL, setAuthToken } from "./lib/apiClient";
+import { API_BASE_URL, setAuthToken } from "../lib/apiClient";
 
 const Index = () => {
   const router = useRouter();
 
+  // UI states
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // form fields
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  // button loading state
   const [submitting, setSubmitting] = useState(false);
 
+  // checks saved login token + role
   useEffect(() => {
     const checkLogin = async () => {
       try {
@@ -32,13 +39,16 @@ const Index = () => {
         const savedRole = await AsyncStorage.getItem("userRole");
         const savedEmail = await AsyncStorage.getItem("savedEmail");
 
+        // auto-fill email if remembered
         if (savedEmail) {
           setEmail(savedEmail);
           setRememberMe(true);
         }
 
+        // auto-login if token and role exist
         if (savedToken && savedRole) {
           setAuthToken(savedToken);
+
           if (savedRole === "student") {
             router.replace("/(tabs)/home");
           } else if (savedRole === "instructor") {
@@ -55,6 +65,7 @@ const Index = () => {
     checkLogin();
   }, []);
 
+  // show loading screen while checking storage
   if (loading) {
     return (
       <View style={[styles.container, { justifyContent: "center" }]}>
@@ -63,6 +74,7 @@ const Index = () => {
     );
   }
 
+  // handles login request
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert("Missing fields", "Please enter email and password.");
@@ -80,31 +92,37 @@ const Index = () => {
         body: JSON.stringify({ email, password }),
       });
 
+      // handle invalid login
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         const msg = data.message || "Login failed";
+
         Alert.alert("Login error", msg);
         setSubmitting(false);
         return;
       }
 
+      // get token and user data
       const data = await res.json();
       const { token, user } = data;
 
       setAuthToken(token);
 
+      // save auth info
       await AsyncStorage.multiSet([
         ["authToken", token],
         ["userRole", user.role],
         ["userData", JSON.stringify(user)],
       ]);
 
+      // save or remove remembered email
       if (rememberMe) {
         await AsyncStorage.setItem("savedEmail", email);
       } else {
         await AsyncStorage.removeItem("savedEmail");
       }
 
+      // redirect based on role
       if (user.role === "student") {
         router.replace("/(tabs)/home");
       } else if (user.role === "instructor") {
@@ -164,6 +182,8 @@ const Index = () => {
             value={password}
             onChangeText={setPassword}
           />
+
+          {/* show/hide password */}
           <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
             <Feather
               name={showPassword ? "eye" : "eye-off"}

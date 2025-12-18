@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+// FILE: mobile/app/(tabs)/home.jsx
+
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   LayoutAnimation,
   Platform,
@@ -10,15 +12,17 @@ import {
   UIManager,
   View,
 } from "react-native";
+import { useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   getAssignments,
+  refreshAssignments,
+  submitAssignment,
   subscribe,
   unsubscribe,
-  submitAssignment,
-} from "../data/assignments";
-import { useRouter } from "expo-router";
+} from "../../data/assignments";
 
-
+// enables LayoutAnimation on Android
 if (
   Platform.OS === "android" &&
   UIManager.setLayoutAnimationEnabledExperimental
@@ -26,123 +30,173 @@ if (
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-
-const TOP_FILTERS = ["all", "today", "upcoming", "overdue", "done", "missed"];
 const TABS = ["pending", "finished", "missed"];
 
 export default function StudentHome() {
   const router = useRouter();
+
+  // assignments + UI states
   const [assignments, setAssignments] = useState(getAssignments());
   const [expandedId, setExpandedId] = useState(null);
-  const [activeFilter, setActiveFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("pending");
+  const [activeFilter, setActiveFilter] = useState("all");
   const [search, setSearch] = useState("");
 
+  // subscribe to assignments updates
   useEffect(() => {
     const handler = (list) => setAssignments(list);
     subscribe(handler);
     return () => unsubscribe(handler);
   }, []);
 
+  // refresh when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      refreshAssignments();
+    }, [])
+  );
+
   const todayStr = new Date().toISOString().split("T")[0];
 
-  
-  const getStatusInfo = (a) => {
-    if (a.submittedCount > 0) {
-      
-      return {
-        key: "done",
-        label: "Done",
-        bg: "#DCFCE7",
-        color: "#16A34A",
-      };
-    }
-
-    if (a.reviewed && a.submittedCount === 0) {
-     
-      return {
-        key: "missed",
-        label: "Missed",
-        bg: "#FEF3C7",
-        color: "#B45309",
-      };
-    }
-
-    if (a.deadline === todayStr) {
-      return {
-        key: "today",
-        label: "Today",
-        bg: "#DBEAFE",
-        color: "#1D4ED8",
-      };
-    }
-
-    if (a.deadline > todayStr) {
-      return {
-        key: "upcoming",
-        label: "Upcoming",
-        bg: "#E0F2FE",
-        color: "#0369A1",
-      };
-    }
-
-    return {
-      key: "overdue",
-      label: "Overdue",
-      bg: "#FEE2E2",
-      color: "#B91C1C",
-    };
-  };
-
-  const toggleExpand = (id) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setExpandedId((prev) => (prev === id ? null : id));
-  };
-
-  const handleMarkAsDone = (id) => {
-    submitAssignment(id);
-  };
-
-  
-  const pendingList = assignments.filter(
-    (a) => !a.reviewed && a.submittedCount === 0
+  // tab lists
+  const pendingList = useMemo(
+    () => assignments.filter((a) => !a.reviewed && (a.submittedCount || 0) === 0),
+    [assignments]
   );
-  const finishedList = assignments.filter((a) => a.submittedCount > 0);
-  const missedList = assignments.filter(
-    (a) => a.reviewed && a.submittedCount === 0
+
+  const finishedList = useMemo(
+    () => assignments.filter((a) => (a.submittedCount || 0) > 0),
+    [assignments]
+  );
+
+  const missedList = useMemo(
+    () => assignments.filter((a) => a.reviewed && (a.submittedCount || 0) === 0),
+    [assignments]
   );
 
   let baseList = pendingList;
   if (activeTab === "finished") baseList = finishedList;
   if (activeTab === "missed") baseList = missedList;
 
-  
-  const filteredList = baseList.filter((a) => {
-    const status = getStatusInfo(a).key;
+  // filters depend on active tab
+  const TOP_FILTERS = useMemo(() => {
+    if (activeTab === "pending") return ["all", "today", "upcoming", "overdue"];
+    if (activeTab === "finished") return ["all", "today", "this_week", "older"];
+    return ["all", "this_week", "older"];
+  }, [activeTab]);
 
-    if (activeFilter !== "all" && status !== activeFilter) return false;
+  // returns start of current week (Mon)
+  const getStartOfWeek = (d) => {
+    const copy = new Date(d);
+    const day = copy.getDay();
+    const diff = copy.getDate() - day + (day === 0 ? -6 : 1);
 
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    return (
-      a.title.toLowerCase().includes(q) ||
-      a.subject.toLowerCase().includes(q) ||
-      (a.description || "").toLowerCase().includes(q)
-    );
-  });
+    copy.setDate(diff);
+    copy.setHours(0, 0, 0, 0);
 
-  const stats = {
-    pending: pendingList.length,
-    finished: finishedList.length,
-    missed: missedList.length,
+    return copy;
+  };
+
+  const startOfWeek = getStartOfWeek(new Date());
+
+  // applies top filter based on current tab
+  const applyTabFilter = (a) => {
+    if (activeFilter === "all") return true;
+
+    if (activeTab === "pending") {
+      if (activeFilter === "today") return a.deadline === todayStr;
+      if (activeFilter === "upcoming") return a.deadline > todayStr;
+      if (activeFilter === "overdue") return a.deadline < todayStr;
+      return true;
+    }
+
+    const d = new Date(a.updatedAt || a.createdAt || Date.now());
+
+    if (activeFilter === "today") {
+      const now = new Date();
+      return (
+        d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth() &&
+        d.getDate() === now.getDate()
+      );
+    }
+
+    if (activeFilter === "this_week") return d >= startOfWeek;
+    if (activeFilter === "older") return d < startOfWeek;
+
+    return true;
+  };
+
+  // applies search + filter
+  const filteredList = useMemo(() => {
+    const q = search.trim().toLowerCase();
+
+    return baseList.filter((a) => {
+      if (!applyTabFilter(a)) return false;
+      if (!q) return true;
+
+      return (
+        (a.title || "").toLowerCase().includes(q) ||
+        (a.subject || "").toLowerCase().includes(q) ||
+        (a.description || "").toLowerCase().includes(q)
+      );
+    });
+  }, [baseList, search, activeFilter, activeTab]);
+
+  // computes status pill info
+  const getStatusInfo = (a) => {
+    if ((a.submittedCount || 0) > 0) {
+      return { label: "Done", bg: "#DCFCE7", color: "#16A34A" };
+    }
+    if (a.reviewed && (a.submittedCount || 0) === 0) {
+      return { label: "Missed", bg: "#FEF3C7", color: "#B45309" };
+    }
+    if (a.deadline === todayStr) {
+      return { label: "Today", bg: "#DBEAFE", color: "#1D4ED8" };
+    }
+    if (a.deadline > todayStr) {
+      return { label: "Upcoming", bg: "#E0F2FE", color: "#0369A1" };
+    }
+    return { label: "Overdue", bg: "#FEE2E2", color: "#B91C1C" };
+  };
+
+  // expands/collapses a card
+  const toggleExpand = (id) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpandedId((prev) => (prev === id ? null : id));
+  };
+
+  // marks an activity as done
+  const handleMarkAsDone = async (a) => {
+    if (a.reviewed) return;
+
+    try {
+      await submitAssignment(a._id);
+
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setExpandedId(null);
+      setActiveTab("finished");
+      setActiveFilter("all");
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  // label for filter chips
+  const chipLabel = (f) => {
+    if (f === "all") return "All";
+    if (f === "today") return "Today";
+    if (f === "upcoming") return "Upcoming";
+    if (f === "overdue") return "Overdue";
+    if (f === "this_week") return "This Week";
+    return "Older";
   };
 
   return (
     <View style={styles.container}>
       <View style={styles.contentWrapper}>
-        <Text style={styles.pageTitle}>Hello, Jeremiah!</Text>
+        <Text style={styles.pageTitle}>Hello!</Text>
 
-        {/*  Search bar */}
         <TextInput
           style={styles.searchInput}
           placeholder="Search activities..."
@@ -151,7 +205,7 @@ export default function StudentHome() {
           onChangeText={setSearch}
         />
 
-        {/*  Top filters */}
+        {/* filter chips */}
         <View style={styles.filterRow}>
           {TOP_FILTERS.map((f) => (
             <TouchableOpacity
@@ -161,6 +215,7 @@ export default function StudentHome() {
                 styles.filterChip,
                 activeFilter === f && styles.filterChipActive,
               ]}
+              activeOpacity={0.85}
             >
               <Text
                 style={[
@@ -168,39 +223,13 @@ export default function StudentHome() {
                   activeFilter === f && styles.filterTextActive,
                 ]}
               >
-                {f === "all"
-                  ? "All"
-                  : f === "today"
-                  ? "Today"
-                  : f === "upcoming"
-                  ? "Upcoming"
-                  : f === "overdue"
-                  ? "Overdue"
-                  : f === "done"
-                  ? "Done"
-                  : "Missed"}
+                {chipLabel(f)}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/*  Stats row */}
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{stats.pending}</Text>
-            <Text style={styles.statLabel}>Pending</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{stats.finished}</Text>
-            <Text style={styles.statLabel}>Done</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{stats.missed}</Text>
-            <Text style={styles.statLabel}>Missed</Text>
-          </View>
-        </View>
-
-        {/* Segmented control (Pending / Finished / Missed) */}
+        {/* tabs */}
         <View style={styles.segmentContainer}>
           {TABS.map((tab) => (
             <TouchableOpacity
@@ -214,8 +243,10 @@ export default function StudentHome() {
                   LayoutAnimation.Presets.easeInEaseOut
                 );
                 setActiveTab(tab);
+                setActiveFilter("all");
                 setExpandedId(null);
               }}
+              activeOpacity={0.9}
             >
               <Text
                 style={[
@@ -233,28 +264,25 @@ export default function StudentHome() {
           ))}
         </View>
 
-        {/*  List */}
+        {/* list */}
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={{ paddingBottom: 50 }}
         >
           {filteredList.length === 0 ? (
-            <Text style={styles.empty}>
-              No activities.
-            </Text>
+            <Text style={styles.empty}>No activities.</Text>
           ) : (
             filteredList.map((a) => {
               const status = getStatusInfo(a);
-              const expanded = expandedId === a.id;
+              const expanded = expandedId === a._id;
 
               return (
                 <TouchableOpacity
-                  key={a.id}
-                  onPress={() => toggleExpand(a.id)}
-                  activeOpacity={0.85}
+                  key={a._id}
+                  onPress={() => toggleExpand(a._id)}
+                  activeOpacity={0.88}
                   style={styles.card}
                 >
-                  {/* top row */}
                   <View style={styles.cardTopRow}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.cardTitle}>{a.title}</Text>
@@ -265,10 +293,7 @@ export default function StudentHome() {
                     </View>
 
                     <View
-                      style={[
-                        styles.statusPill,
-                        { backgroundColor: status.bg },
-                      ]}
+                      style={[styles.statusPill, { backgroundColor: status.bg }]}
                     >
                       <Text
                         style={[
@@ -281,7 +306,6 @@ export default function StudentHome() {
                     </View>
                   </View>
 
-                  {/* expanded details */}
                   {expanded && (
                     <View style={styles.details}>
                       <Text style={styles.label}>Description</Text>
@@ -289,39 +313,33 @@ export default function StudentHome() {
                         {a.description || "No description provided."}
                       </Text>
 
-                      <Text style={styles.label}>Submission</Text>
-                      <Text style={styles.value}>
-                        {a.submittedCount > 0
-                          ? "You have submitted this activity."
-                          : "Not submitted yet."}
-                      </Text>
-
-                      {/* Go to full detail page */}
                       <TouchableOpacity
                         style={styles.detailsButton}
                         onPress={() =>
                           router.push({
                             pathname: "/activity-details",
-                            params: { id: String(a.id) },
+                            params: { id: String(a._id) },
                           })
                         }
+                        activeOpacity={0.9}
                       >
-                        <Text style={styles.detailsButtonText}>
-                          View details
-                        </Text>
+                        <Text style={styles.detailsButtonText}>View details</Text>
                       </TouchableOpacity>
 
-                      {/* Mark as done (only if pending) */}
-                      {activeTab === "pending" && a.submittedCount === 0 && (
-                        <TouchableOpacity
-                          onPress={() => handleMarkAsDone(a.id)}
-                          style={styles.doneButton}
-                        >
-                          <Text style={styles.doneButtonText}>
-                            Mark as Done
-                          </Text>
-                        </TouchableOpacity>
-                      )}
+                      {/* only show mark as done for pending + active */}
+                      {activeTab === "pending" &&
+                        !a.reviewed &&
+                        (a.submittedCount || 0) === 0 && (
+                          <TouchableOpacity
+                            onPress={() => handleMarkAsDone(a)}
+                            style={styles.doneButton}
+                            activeOpacity={0.9}
+                          >
+                            <Text style={styles.doneButtonText}>
+                              Mark as Done
+                            </Text>
+                          </TouchableOpacity>
+                        )}
                     </View>
                   )}
                 </TouchableOpacity>
@@ -334,23 +352,17 @@ export default function StudentHome() {
   );
 }
 
-// styles
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#EAF4FF",
-  },
-  contentWrapper: {
-    flex: 1,
-    paddingHorizontal: 18,
-    paddingTop: 10,
-  },
+  container: { flex: 1, backgroundColor: "#EAF4FF" },
+  contentWrapper: { flex: 1, paddingHorizontal: 18, paddingTop: 10 },
+
   pageTitle: {
     fontSize: 20,
     fontWeight: "700",
     color: "#0B1220",
     marginBottom: 8,
   },
+
   searchInput: {
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
@@ -360,11 +372,8 @@ const styles = StyleSheet.create({
     color: "#111827",
     marginBottom: 10,
   },
-  filterRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginBottom: 10,
-  },
+
+  filterRow: { flexDirection: "row", flexWrap: "wrap", marginBottom: 10 },
   filterChip: {
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -373,39 +382,10 @@ const styles = StyleSheet.create({
     marginRight: 8,
     marginBottom: 6,
   },
-  filterChipActive: {
-    backgroundColor: "#2F80ED",
-  },
-  filterText: {
-    fontSize: 12,
-    color: "#1D4ED8",
-    fontWeight: "600",
-  },
-  filterTextActive: {
-    color: "#FFFFFF",
-  },
-  statsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: "center",
-    marginHorizontal: 4,
-  },
-  statNumber: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#2F80ED",
-  },
-  statLabel: {
-    fontSize: 12,
-    color: "#4B5563",
-  },
+  filterChipActive: { backgroundColor: "#2F80ED" },
+  filterText: { fontSize: 12, color: "#1D4ED8", fontWeight: "600" },
+  filterTextActive: { color: "#FFFFFF" },
+
   segmentContainer: {
     flexDirection: "row",
     backgroundColor: "#DCE8F5",
@@ -413,25 +393,13 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     marginBottom: 10,
   },
-  segmentButton: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: "center",
-  },
-  segmentSelected: {
-    backgroundColor: "#2F80ED",
-  },
-  segmentText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#374151",
-  },
-  segmentTextSelected: {
-    color: "#FFFFFF",
-  },
-  scroll: {
-    flex: 1,
-  },
+  segmentButton: { flex: 1, paddingVertical: 8, alignItems: "center" },
+  segmentSelected: { backgroundColor: "#2F80ED" },
+  segmentText: { fontSize: 13, fontWeight: "600", color: "#374151" },
+  segmentTextSelected: { color: "#FFFFFF" },
+
+  scroll: { flex: 1 },
+
   card: {
     backgroundColor: "#FFFFFF",
     borderRadius: 14,
@@ -440,24 +408,11 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: "#2563EB",
   },
-  cardTopRow: {
-    flexDirection: "row",
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#111827",
-  },
-  cardSubject: {
-    fontSize: 13,
-    color: "#2563EB",
-    marginTop: 2,
-  },
-  cardDeadline: {
-    fontSize: 13,
-    color: "#4B5563",
-    marginTop: 4,
-  },
+  cardTopRow: { flexDirection: "row" },
+  cardTitle: { fontSize: 16, fontWeight: "700", color: "#111827" },
+  cardSubject: { fontSize: 13, color: "#2563EB", marginTop: 2 },
+  cardDeadline: { fontSize: 13, color: "#4B5563", marginTop: 4 },
+
   statusPill: {
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -465,27 +420,17 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     marginLeft: 8,
   },
-  statusPillText: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
+  statusPillText: { fontSize: 12, fontWeight: "600" },
+
   details: {
     marginTop: 10,
     borderTopWidth: 1,
     borderTopColor: "#E5E7EB",
     paddingTop: 8,
   },
-  label: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#4B5563",
-    marginTop: 6,
-  },
-  value: {
-    fontSize: 13,
-    color: "#374151",
-    marginTop: 2,
-  },
+  label: { fontSize: 13, fontWeight: "700", color: "#4B5563", marginTop: 6 },
+  value: { fontSize: 13, color: "#374151", marginTop: 2 },
+
   detailsButton: {
     marginTop: 10,
     borderRadius: 8,
@@ -494,11 +439,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     alignItems: "center",
   },
-  detailsButtonText: {
-    color: "#2F80ED",
-    fontWeight: "700",
-    fontSize: 14,
-  },
+  detailsButtonText: { color: "#2F80ED", fontWeight: "700", fontSize: 14 },
+
   doneButton: {
     marginTop: 8,
     backgroundColor: "#2F80ED",
@@ -506,10 +448,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     alignItems: "center",
   },
-  doneButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-  },
+  doneButtonText: { color: "#FFFFFF", fontWeight: "700" },
+
   empty: {
     textAlign: "center",
     marginTop: 24,

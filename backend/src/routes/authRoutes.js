@@ -1,4 +1,5 @@
 // backend/src/routes/authRoutes.js
+// Authentication routes (register & login)
 
 import express from "express";
 import User from "../models/User.js";
@@ -7,46 +8,44 @@ import bcrypt from "bcryptjs";
 
 const router = express.Router();
 
-const generateToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: "15d" });
-};
+// generate JWT token for user
+const generateToken = (userId) =>
+  jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: "15d" });
 
+// user registration
 router.post("/register", async (req, res) => {
   try {
     const { username, email, password } = req.body;
 
-    if (!username || !email || !password) {
+    // basic validation
+    if (!username || !email || !password)
       return res.status(400).json({ message: "All fields are required" });
-    }
 
-    if (password.length < 6) {
+    if (password.length < 6)
       return res
         .status(400)
-        .json({ message: "Password should be at least 6 characters long" });
-    }
+        .json({ message: "Password must be at least 6 characters" });
 
-    if (username.length < 6) {
+    if (username.length < 6)
       return res
         .status(400)
-        .json({ message: "Username should be at least 6 characters long" });
-    }
+        .json({ message: "Username must be at least 6 characters" });
 
-    const existingEmail = await User.findOne({ email });
-    if (existingEmail) {
+    // check if email or username already exists
+    if (await User.findOne({ email }))
       return res.status(400).json({ message: "Email already taken" });
-    }
 
-    const existingUser = await User.findOne({ username });
-    if (existingUser) {
+    if (await User.findOne({ username }))
       return res.status(400).json({ message: "User already taken" });
-    }
 
+    // default profile image
     const profileImage = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`;
 
-    // 👇 simple auto-role: university emails → instructor, others → student
+    // assign role based on email domain
     const role = email.endsWith("@university.edu") ? "instructor" : "student";
 
-    const user = new User({
+    // create user
+    const user = await User.create({
       username,
       email,
       password,
@@ -54,8 +53,7 @@ router.post("/register", async (req, res) => {
       role,
     });
 
-    await user.save();
-
+    // send token and user data
     const token = generateToken(user._id);
     res.status(201).json({
       token,
@@ -67,39 +65,44 @@ router.post("/register", async (req, res) => {
       },
     });
   } catch (error) {
-    console.log("Error in register route", error);
-    return res.status(500).json({ message: "Internal Server error" });
+    console.error("Register error", error);
+    res.status(500).json({ message: "Internal Server error" });
   }
 });
 
+// user login
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    // validate input
     if (!email || !password)
       return res.status(400).json({ message: "All fields are required" });
 
+    // find user
     const user = await User.findOne({ email });
     if (!user)
       return res.status(400).json({ message: "Invalid credentials" });
 
+    // compare passwords
     const isPasswordMatch = await bcrypt.compare(password, user.password);
     if (!isPasswordMatch)
       return res.status(400).json({ message: "Invalid credentials" });
 
+    // generate token
     const token = generateToken(user._id);
-    return res.status(200).json({
+    res.status(200).json({
       token,
       user: {
         id: user._id,
         username: user.username,
         email: user.email,
-        role: user.role, // 👈 important
+        role: user.role,
       },
     });
   } catch (error) {
-    console.log("Error in login route", error);
-    return res.status(500).json({ message: "Internal Server error" });
+    console.error("Login error", error);
+    res.status(500).json({ message: "Internal Server error" });
   }
 });
 

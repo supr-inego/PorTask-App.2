@@ -1,12 +1,16 @@
+// backend/src/routes/notificationRoutes.js
+// Routes for student notifications
+
 import express from "express";
 import Notification from "../models/Notification.js";
 import { protect } from "../middleware/auth.js";
 
 const router = express.Router();
 
-// Get all notifications (global, like your frontend store)
+// get all notifications (protected)
 router.get("/", protect, async (req, res) => {
   try {
+    // fetch notifications sorted by newest first
     const list = await Notification.find().sort({ date: -1 });
     res.json(list);
   } catch (err) {

@@ -1,26 +1,32 @@
+// FILE: mobile/app/(instructorTabs)/profile.jsx
+
 import React, { useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  Image,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
   Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
+import { setAuthToken } from "../../lib/apiClient";
 
 const InstructorProfile = () => {
+  const router = useRouter();
+
+  // profile states
   const [profileImage, setProfileImage] = useState(null);
   const [bio, setBio] = useState(
     "rara sah RG pa immortal ngani, tatagos kaba sah?."
   );
   const [isEditing, setIsEditing] = useState(false);
-  const router = useRouter();
 
+  // pick profile image (only when editing)
   const pickImage = async () => {
     if (!isEditing) return;
 
@@ -41,6 +47,7 @@ const InstructorProfile = () => {
     }
   };
 
+  // logout: clears stored auth + redirects to login
   const handleLogout = async () => {
     Alert.alert("Logout", "Do you really want to log out?", [
       { text: "Cancel", style: "cancel" },
@@ -48,12 +55,15 @@ const InstructorProfile = () => {
         text: "Logout",
         style: "destructive",
         onPress: async () => {
-          try {
-            await AsyncStorage.removeItem("userRole");
-            router.replace("/"); // back to login
-          } catch (error) {
-            console.log("Logout error:", error);
-          }
+          await AsyncStorage.multiRemove([
+            "authToken",
+            "userRole",
+            "userData",
+            "savedEmail",
+          ]);
+
+          setAuthToken(null);
+          router.replace("/");
         },
       },
     ]);
@@ -137,11 +147,8 @@ const InstructorProfile = () => {
 export default InstructorProfile;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f7fa",
-    padding: 20,
-  },
+  container: { flex: 1, backgroundColor: "#f5f7fa", padding: 20 },
+
   headerBanner: {
     alignItems: "center",
     backgroundColor: "#4A90E2",
@@ -157,16 +164,15 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: "#fff",
   },
+
   editButton: {
     backgroundColor: "#fff",
     paddingVertical: 8,
     paddingHorizontal: 20,
     borderRadius: 20,
   },
-  editButtonText: {
-    color: "#4A90E2",
-    fontWeight: "600",
-  },
+  editButtonText: { color: "#4A90E2", fontWeight: "600" },
+
   card: {
     backgroundColor: "#fff",
     padding: 15,
@@ -183,10 +189,8 @@ const styles = StyleSheet.create({
     color: "#4A90E2",
     marginBottom: 4,
   },
-  value: {
-    fontSize: 15,
-    color: "#333",
-  },
+  value: { fontSize: 15, color: "#333" },
+
   input: {
     fontSize: 15,
     color: "#333",
@@ -194,6 +198,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#ccc",
     paddingVertical: 4,
   },
+
   logoutButton: {
     backgroundColor: "#FF5252",
     paddingVertical: 12,
@@ -201,9 +206,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 20,
   },
-  logoutText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 16,
-  },
+  logoutText: { color: "#fff", fontWeight: "700", fontSize: 16 },
 });

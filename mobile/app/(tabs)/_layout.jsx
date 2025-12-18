@@ -1,3 +1,5 @@
+// FILE: mobile/app/(tabs)/_layout.jsx
+
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Platform, TouchableOpacity } from "react-native";
@@ -8,11 +10,12 @@ export default function StudentTabsLayout() {
       screenOptions={{
         tabBarActiveTintColor: "#2F80ED",
         tabBarInactiveTintColor: "gray",
+
         headerStyle: { backgroundColor: "#2F80ED" },
         headerTintColor: "#fff",
         headerTitleStyle: { fontWeight: "bold" },
 
-        // remove ripple
+        // remove ripple effect on Android
         tabBarButton: (props) => (
           <TouchableOpacity
             {...props}
@@ -31,6 +34,7 @@ export default function StudentTabsLayout() {
           ),
         }}
       />
+
       <Tabs.Screen
         name="calendar"
         options={{
@@ -40,15 +44,21 @@ export default function StudentTabsLayout() {
           ),
         }}
       />
+
       <Tabs.Screen
         name="notification"
         options={{
           title: "Notifications",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="notifications-outline" size={size} color={color} />
+            <Ionicons
+              name="notifications-outline"
+              size={size}
+              color={color}
+            />
           ),
         }}
       />
+
       <Tabs.Screen
         name="profile"
         options={{

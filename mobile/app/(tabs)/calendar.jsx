@@ -1,14 +1,27 @@
+// FILE: mobile/app/(tabs)/calendar.jsx
+
 import React, { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Text, View, TouchableOpacity } from "react-native";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { Calendar } from "react-native-calendars";
-import { getAssignments, subscribe, unsubscribe } from "../data/assignments";
 import { useRouter } from "expo-router";
+import { getAssignments, subscribe, unsubscribe } from "../../data/assignments";
 
 export default function StudentCalendar() {
-  const [assignments, setAssignments] = useState(getAssignments());
-  const [selectedDate, setSelectedDate] = useState(null);
   const router = useRouter();
 
+  // assignments from store
+  const [assignments, setAssignments] = useState(getAssignments());
+
+  // selected date from calendar
+  const [selectedDate, setSelectedDate] = useState(null);
+
+  // subscribe to assignments updates
   useEffect(() => {
     const handler = (list) => setAssignments(list);
     subscribe(handler);
@@ -17,32 +30,30 @@ export default function StudentCalendar() {
 
   const todayStr = new Date().toISOString().split("T")[0];
 
-  const pending = assignments.filter(
-    (a) => !a.reviewed && a.submittedCount === 0
-  );
+  // status groups
+  const pending = assignments.filter((a) => !a.reviewed && a.submittedCount === 0);
   const finished = assignments.filter((a) => a.submittedCount > 0);
-  const missed = assignments.filter(
-    (a) => a.reviewed && a.submittedCount === 0
-  );
+  const missed = assignments.filter((a) => a.reviewed && a.submittedCount === 0);
 
+  // calendar marked dates
   const markedDates = {};
 
+  // adds a colored dot to a date
   const addDot = (date, color, key) => {
     if (!date) return;
-    if (!markedDates[date]) markedDates[date] = { dots: [] };
+
+    if (!markedDates[date]) {
+      markedDates[date] = { dots: [] };
+    }
+
     markedDates[date].dots.push({ key, color });
   };
 
-  pending.forEach((a) =>
-    addDot(a.deadline, "#2563EB", `p-${a.id}`)
-  );
-  finished.forEach((a) =>
-    addDot(a.deadline, "#22C55E", `f-${a.id}`)
-  );
-  missed.forEach((a) =>
-    addDot(a.deadline, "#F97316", `m-${a.id}`)
-  );
+  pending.forEach((a) => addDot(a.deadline, "#2563EB", `p-${a._id || a.id}`));
+  finished.forEach((a) => addDot(a.deadline, "#22C55E", `f-${a._id || a.id}`));
+  missed.forEach((a) => addDot(a.deadline, "#F97316", `m-${a._id || a.id}`));
 
+  // highlight selected date
   if (selectedDate) {
     markedDates[selectedDate] = {
       ...(markedDates[selectedDate] || {}),
@@ -51,10 +62,12 @@ export default function StudentCalendar() {
     };
   }
 
+  // list for selected date
   const assignmentsForSelectedDate = selectedDate
     ? assignments.filter((a) => a.deadline === selectedDate)
     : [];
 
+  // status label
   const getStatusLabel = (a) => {
     if (a.submittedCount > 0) return "Done";
     if (a.reviewed && a.submittedCount === 0) return "Missed";
@@ -63,6 +76,7 @@ export default function StudentCalendar() {
     return "Pending";
   };
 
+  // status color
   const getStatusColor = (a) => {
     if (a.submittedCount > 0) return "#22C55E";
     if (a.reviewed && a.submittedCount === 0) return "#F97316";
@@ -74,23 +88,25 @@ export default function StudentCalendar() {
   return (
     <View style={styles.container}>
       <View style={styles.contentWrapper}>
-        
+        {/* legend */}
         <View style={styles.legendRow}>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: "#2563EB" }]} />
             <Text style={styles.legendText}>Pending</Text>
           </View>
+
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: "#22C55E" }]} />
             <Text style={styles.legendText}>Done</Text>
           </View>
+
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: "#F97316" }]} />
             <Text style={styles.legendText}>Missed</Text>
           </View>
         </View>
 
-        {/* Calendar */}
+        {/* calendar */}
         <Calendar
           markedDates={markedDates}
           markingType="multi-dot"
@@ -105,15 +121,13 @@ export default function StudentCalendar() {
           style={styles.calendar}
         />
 
-        {/* List */}
+        {/* selected date list */}
         <ScrollView
           style={styles.listContainer}
           contentContainerStyle={{ paddingBottom: 40 }}
         >
           {!selectedDate ? (
-            <Text style={styles.empty}>
-              Select a date to view activities.
-            </Text>
+            <Text style={styles.empty}>Select a date to view activities.</Text>
           ) : assignmentsForSelectedDate.length === 0 ? (
             <Text style={styles.empty}>
               No activities scheduled on {selectedDate}.
@@ -123,18 +137,20 @@ export default function StudentCalendar() {
               <Text style={styles.sectionTitle}>
                 Activities on {selectedDate}
               </Text>
+
               {assignmentsForSelectedDate.map((a) => {
                 const statusLabel = getStatusLabel(a);
                 const statusColor = getStatusColor(a);
+
                 return (
                   <TouchableOpacity
-                    key={a.id}
+                    key={String(a._id || a.id || `${a.deadline}-${a.title}`)}
                     style={styles.card}
                     activeOpacity={0.85}
                     onPress={() =>
                       router.push({
                         pathname: "/activity-details",
-                        params: { id: String(a.id) },
+                        params: { id: String(a._id || a.id) },
                       })
                     }
                   >
@@ -143,6 +159,7 @@ export default function StudentCalendar() {
                         <Text style={styles.cardTitle}>{a.title}</Text>
                         <Text style={styles.cardSubject}>{a.subject}</Text>
                       </View>
+
                       <View
                         style={[
                           styles.statusPill,
@@ -159,10 +176,9 @@ export default function StudentCalendar() {
                         </Text>
                       </View>
                     </View>
+
                     {a.description ? (
-                      <Text style={styles.cardDescription}>
-                        {a.description}
-                      </Text>
+                      <Text style={styles.cardDescription}>{a.description}</Text>
                     ) : null}
                   </TouchableOpacity>
                 );
@@ -176,80 +192,48 @@ export default function StudentCalendar() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#EAF4FF",
-  },
-  contentWrapper: {
-    flex: 1,
-    paddingHorizontal: 18,
-    paddingTop: 10,
-  },
-  legendRow: {
-    flexDirection: "row",
-    marginBottom: 8,
-  },
-  legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginRight: 16,
-  },
-  legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginRight: 4,
-  },
-  legendText: {
-    fontSize: 12,
-    color: "#4B5563",
-  },
+  container: { flex: 1, backgroundColor: "#EAF4FF" },
+  contentWrapper: { flex: 1, paddingHorizontal: 18, paddingTop: 10 },
+
+  legendRow: { flexDirection: "row", marginBottom: 8 },
+  legendItem: { flexDirection: "row", alignItems: "center", marginRight: 16 },
+  legendDot: { width: 10, height: 10, borderRadius: 5, marginRight: 4 },
+  legendText: { fontSize: 12, color: "#4B5563" },
+
   calendar: {
     borderRadius: 12,
     overflow: "hidden",
     marginBottom: 10,
     backgroundColor: "#FFFFFF",
   },
-  listContainer: {
-    flex: 1,
-  },
+
+  listContainer: { flex: 1 },
+
   empty: {
     textAlign: "center",
     marginTop: 20,
     color: "#6B7280",
     fontStyle: "italic",
   },
+
   sectionTitle: {
     fontSize: 15,
     fontWeight: "700",
     color: "#111827",
     marginBottom: 8,
   },
+
   card: {
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
     padding: 12,
     marginBottom: 10,
   },
-  cardHeaderRow: {
-    flexDirection: "row",
-    marginBottom: 4,
-  },
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#111827",
-  },
-  cardSubject: {
-    fontSize: 13,
-    color: "#2563EB",
-    marginTop: 2,
-  },
-  cardDescription: {
-    fontSize: 13,
-    color: "#4B5563",
-    marginTop: 4,
-  },
+  cardHeaderRow: { flexDirection: "row", marginBottom: 4 },
+  cardTitle: { fontSize: 15, fontWeight: "700", color: "#111827" },
+  cardSubject: { fontSize: 13, color: "#2563EB", marginTop: 2 },
+  cardDescription: { fontSize: 13, color: "#4B5563", marginTop: 4 },
+
   statusPill: {
     alignSelf: "flex-start",
     paddingHorizontal: 10,
@@ -257,8 +241,5 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     marginLeft: 8,
   },
-  statusPillText: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
+  statusPillText: { fontSize: 12, fontWeight: "600" },
 });

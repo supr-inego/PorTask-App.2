@@ -1,22 +1,27 @@
-import React, { useEffect, useState } from "react";
+// FILE: mobile/app/instructor-all.jsx
+
+import React, { useEffect, useMemo, useState } from "react";
 import {
+  Alert,
+  LayoutAnimation,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-  TouchableOpacity,
-  LayoutAnimation,
-  Platform,
-  UIManager,
   TextInput,
+  TouchableOpacity,
+  UIManager,
+  View,
 } from "react-native";
 import { useRouter } from "expo-router";
 import {
   getAssignments,
   subscribe,
   unsubscribe,
-} from "./data/assignments";
+  toggleReviewed,
+} from "../data/assignments";
 
+// enables LayoutAnimation on Android
 if (
   Platform.OS === "android" &&
   UIManager.setLayoutAnimationEnabledExperimental
@@ -24,86 +29,135 @@ if (
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-export default function InstructorAllActivities() {
+// gets timestamp from Mongo ObjectId (fallback sorting)
+function getMongoIdTimestampMs(id) {
+  try {
+    if (!id || typeof id !== "string" || id.length < 8) return 0;
+
+    const seconds = parseInt(id.substring(0, 8), 16);
+    if (Number.isNaN(seconds)) return 0;
+
+    return seconds * 1000;
+  } catch {
+    return 0;
+  }
+}
+
+export default function InstructorAll() {
   const router = useRouter();
+
+  // assignments list from store
   const [assignments, setAssignments] = useState(getAssignments());
+
+  // which card is expanded
   const [expandedId, setExpandedId] = useState(null);
+
+  // search input
   const [search, setSearch] = useState("");
 
+  // subscribe to assignments updates
   useEffect(() => {
     const handler = (list) => setAssignments(list);
     subscribe(handler);
     return () => unsubscribe(handler);
   }, []);
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  // sort assignments newest -> oldest
+  const sorted = useMemo(() => {
+    const copy = Array.isArray(assignments) ? [...assignments] : [];
 
+    copy.sort((a, b) => {
+      const aMs =
+        (a?.createdAt ? new Date(a.createdAt).getTime() : 0) ||
+        getMongoIdTimestampMs(a?._id) ||
+        0;
+
+      const bMs =
+        (b?.createdAt ? new Date(b.createdAt).getTime() : 0) ||
+        getMongoIdTimestampMs(b?._id) ||
+        0;
+
+      return bMs - aMs;
+    });
+
+    return copy;
+  }, [assignments]);
+
+  // filter assignments by search query
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return sorted;
+
+    return sorted.filter((a) => {
+      return (
+        (a?.title || "").toLowerCase().includes(q) ||
+        (a?.subject || "").toLowerCase().includes(q) ||
+        (a?.description || "").toLowerCase().includes(q)
+      );
+    });
+  }, [sorted, search]);
+
+  // expands or collapses a card
   const toggleExpand = (id) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedId((prev) => (prev === id ? null : id));
   };
 
-  const getStatus = (a) => {
-    if (a.reviewed) return { text: "Reviewed", bg: "#E5E7EB", color: "#374151" };
-    if (a.deadline === todayStr) return { text: "Today", bg: "#DBEAFE", color: "#1D4ED8" };
-    if (a.deadline > todayStr) return { text: "Upcoming", bg: "#DCFCE7", color: "#16A34A" };
-    return { text: "Overdue", bg: "#FEF3C7", color: "#B45309" };
+  // reopens a reviewed activity
+  const handleReopen = (a) => {
+    Alert.alert("Reopen Activity", "Do you want to reopen this activity?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Reopen",
+        onPress: async () => {
+          try {
+            await toggleReviewed(a._id);
+            setExpandedId(null);
+          } catch (e) {
+            console.error(e);
+            Alert.alert("Error", "Failed to reopen activity.");
+          }
+        },
+      },
+    ]);
   };
-
-  const filteredAssignments = assignments.filter((a) => {
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    return (
-      a.title.toLowerCase().includes(q) ||
-      a.subject.toLowerCase().includes(q) ||
-      (a.description || "").toLowerCase().includes(q)
-    );
-  });
 
   return (
     <View style={styles.container}>
-      {/* 🔵 Header like Dashboard */}
-      <View style={styles.blueHeader}>
+      {/* header */}
+      <View style={styles.header}>
         <Text style={styles.headerTitle}>All Activities</Text>
       </View>
 
-      {/* MAIN CONTENT */}
-      <View style={styles.contentWrapper}>
-        {/* Back Button */}
-        <TouchableOpacity
-          onPress={() => router.back()}
-          activeOpacity={0.7}
-          style={styles.backRow}
-        >
+      <View style={styles.content}>
+        {/* back button */}
+        <TouchableOpacity onPress={() => router.back()} style={styles.backRow}>
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
 
-        {/* Search */}
+        {/* search input */}
         <TextInput
           style={styles.searchBox}
-          placeholder="Search activities (title, subject, description)..."
+          placeholder="Search activities..."
           placeholderTextColor="#9CA3AF"
           value={search}
           onChangeText={setSearch}
         />
 
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={{ paddingBottom: 40 }}
-        >
-          {filteredAssignments.length === 0 ? (
+        <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+          {filtered.length === 0 ? (
             <Text style={styles.empty}>No activities match your search.</Text>
           ) : (
-            filteredAssignments.map((a) => {
-              const status = getStatus(a);
-              const expanded = expandedId === a.id;
+            filtered.map((a) => {
+              const id = a._id || a.id;
+              const expanded = expandedId === id;
 
               return (
                 <TouchableOpacity
-                  key={a.id}
+                  key={String(id)}
                   style={styles.card}
-                  activeOpacity={0.85}
-                  onPress={() => toggleExpand(a.id)}
+                  activeOpacity={0.9}
+                  onPress={() => toggleExpand(id)}
                 >
                   <View style={styles.cardTop}>
                     <View style={{ flex: 1 }}>
@@ -114,43 +168,38 @@ export default function InstructorAllActivities() {
                       </Text>
                     </View>
 
-                    <View
-                      style={[
-                        styles.statusTag,
-                        { backgroundColor: status.bg },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.statusText,
-                          { color: status.color },
-                        ]}
-                      >
-                        {status.text}
-                      </Text>
-                    </View>
+                    {/* status tag */}
+                    {a.reviewed ? (
+                      <View style={styles.reviewedTag}>
+                        <Text style={styles.reviewedText}>Reviewed</Text>
+                      </View>
+                    ) : (
+                      <View style={styles.activeTag}>
+                        <Text style={styles.activeText}>Active</Text>
+                      </View>
+                    )}
                   </View>
 
-                  {/* Expanded */}
                   {expanded && (
                     <View style={styles.expanded}>
                       <Text style={styles.label}>Description</Text>
-                      <Text style={styles.desc}>{a.description}</Text>
+                      <Text style={styles.desc}>{a.description || "-"}</Text>
 
                       <Text style={styles.label}>Submissions</Text>
                       <Text style={styles.desc}>
-                        {a.submittedCount}/{a.totalStudents} submitted
+                        {(a.submittedCount || 0)}/{a.totalStudents || 0}{" "}
+                        submitted
                       </Text>
 
-                      {a.attachments && a.attachments.length > 0 && (
-                        <>
-                          <Text style={styles.label}>Attachments</Text>
-                          {a.attachments.map((att) => (
-                            <Text key={att.id} style={styles.desc}>
-                              • {att.name}
-                            </Text>
-                          ))}
-                        </>
+                      {/* only reviewed activities can be reopened */}
+                      {a.reviewed && (
+                        <TouchableOpacity
+                          style={styles.reopenBtn}
+                          onPress={() => handleReopen(a)}
+                          activeOpacity={0.9}
+                        >
+                          <Text style={styles.reopenText}>Reopen Activity</Text>
+                        </TouchableOpacity>
                       )}
                     </View>
                   )}
@@ -165,38 +214,21 @@ export default function InstructorAllActivities() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#EAF4FF",
-  },
+  container: { flex: 1, backgroundColor: "#EAF4FF" },
 
-  blueHeader: {
+  header: {
     backgroundColor: "#2F80ED",
     height: 95,
     justifyContent: "flex-end",
     paddingBottom: 18,
     alignItems: "center",
   },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#FFFFFF",
-  },
+  headerTitle: { fontSize: 22, fontWeight: "800", color: "#FFFFFF" },
 
-  contentWrapper: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 10,
-  },
+  content: { flex: 1, paddingHorizontal: 16, paddingTop: 10 },
 
-  backRow: {
-    marginBottom: 6,
-  },
-  backText: {
-    color: "#111827",
-    fontSize: 17,
-    fontWeight: "600",
-  },
+  backRow: { marginBottom: 8 },
+  backText: { fontSize: 16, fontWeight: "700", color: "#111827" },
 
   searchBox: {
     backgroundColor: "#FFFFFF",
@@ -216,36 +248,33 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: "#2563EB",
   },
-  cardTop: {
-    flexDirection: "row",
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#0F172A",
-  },
-  subject: {
-    color: "#2563EB",
-    marginTop: 2,
-    fontSize: 13,
-  },
-  deadline: {
-    color: "#4B5563",
-    fontSize: 13,
-    marginTop: 4,
-  },
-  statusTag: {
+  cardTop: { flexDirection: "row" },
+
+  title: { fontSize: 16, fontWeight: "700", color: "#0F172A" },
+  subject: { color: "#2563EB", marginTop: 2, fontSize: 13 },
+  deadline: { color: "#4B5563", fontSize: 13, marginTop: 4 },
+
+  activeTag: {
+    backgroundColor: "#DCFCE7",
+    borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 999,
-    marginLeft: 10,
     height: 25,
     justifyContent: "center",
+    marginLeft: 10,
   },
-  statusText: {
-    fontSize: 12,
-    fontWeight: "600",
+  activeText: { fontSize: 12, fontWeight: "700", color: "#16A34A" },
+
+  reviewedTag: {
+    backgroundColor: "#E5E7EB",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    height: 25,
+    justifyContent: "center",
+    marginLeft: 10,
   },
+  reviewedText: { fontSize: 12, fontWeight: "700", color: "#374151" },
 
   expanded: {
     marginTop: 10,
@@ -253,17 +282,17 @@ const styles = StyleSheet.create({
     borderTopColor: "#E5E7EB",
     paddingTop: 8,
   },
-  label: {
-    fontSize: 13,
-    fontWeight: "700",
-    marginTop: 6,
-    color: "#4B5563",
+  label: { fontSize: 13, fontWeight: "700", color: "#374151", marginTop: 6 },
+  desc: { fontSize: 13, color: "#4B5563", marginTop: 2 },
+
+  reopenBtn: {
+    marginTop: 12,
+    backgroundColor: "#16A34A",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
   },
-  desc: {
-    fontSize: 13,
-    color: "#4B5563",
-    marginTop: 2,
-  },
+  reopenText: { color: "#fff", fontWeight: "800", fontSize: 13 },
 
   empty: {
     textAlign: "center",

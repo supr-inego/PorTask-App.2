@@ -1,3 +1,6 @@
+// FILE: mobile/app/(instructorTabs)/_layout.jsx
+// Instructor bottom tab navigation layout
+
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Platform, TouchableOpacity } from "react-native";
@@ -6,11 +9,16 @@ export default function InstructorTabsLayout() {
   return (
     <Tabs
       screenOptions={{
+        // active/inactive tab colors
         tabBarActiveTintColor: "#2F80ED",
         tabBarInactiveTintColor: "gray",
+
+        // header styling
         headerStyle: { backgroundColor: "#2F80ED" },
         headerTintColor: "#fff",
         headerTitleStyle: { fontWeight: "bold" },
+
+        // custom tab button to remove ripple effect
         tabBarButton: (props) => (
           <TouchableOpacity
             {...props}
@@ -20,6 +28,7 @@ export default function InstructorTabsLayout() {
         ),
       }}
     >
+      {/* Dashboard / Home */}
       <Tabs.Screen
         name="home"
         options={{
@@ -30,6 +39,7 @@ export default function InstructorTabsLayout() {
         }}
       />
 
+      {/* Notifications */}
       <Tabs.Screen
         name="notification"
         options={{
@@ -40,6 +50,7 @@ export default function InstructorTabsLayout() {
         }}
       />
 
+      {/* Calendar */}
       <Tabs.Screen
         name="calendar"
         options={{
@@ -50,6 +61,7 @@ export default function InstructorTabsLayout() {
         }}
       />
 
+      {/* Profile */}
       <Tabs.Screen
         name="profile"
         options={{

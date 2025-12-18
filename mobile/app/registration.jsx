@@ -1,3 +1,5 @@
+// FILE: mobile/app/registration.jsx
+
 import React, { useState } from "react";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -10,19 +12,26 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
-import { API_BASE_URL } from "./lib/apiClient";
+import { API_BASE_URL } from "../lib/apiClient";
 
 export default function Registration() {
   const router = useRouter();
+
+  // toggles password visibility
   const [showPassword, setShowPassword] = useState(false);
 
+  // form fields
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  // loading state for button
   const [submitting, setSubmitting] = useState(false);
 
+  // handles registration request
   const handleRegister = async () => {
+    // basic validation
     if (!fullName || !username || !email || !password) {
       Alert.alert("Missing fields", "Please fill in all fields.");
       return;
@@ -41,6 +50,7 @@ export default function Registration() {
     try {
       setSubmitting(true);
 
+      // send registration request to backend
       const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
         method: "POST",
         headers: {
@@ -55,19 +65,17 @@ export default function Registration() {
 
       const data = await res.json().catch(() => ({}));
 
+      // handle backend errors
       if (!res.ok) {
         Alert.alert("Registration error", data.message || "Failed to register.");
         setSubmitting(false);
         return;
       }
 
-      // SUCCESS — Show message and send user to login
-      Alert.alert(
-        "Success",
-        "Account created successfully! Please log in.",
-        [{ text: "OK", onPress: () => router.replace("/") }]
-      );
-
+      // success: show message then go back to login
+      Alert.alert("Success", "Account created successfully! Please log in.", [
+        { text: "OK", onPress: () => router.replace("/") },
+      ]);
     } catch (error) {
       console.error("Registration error:", error);
       Alert.alert("Error", "Something went wrong. Please try again.");
@@ -82,7 +90,11 @@ export default function Registration() {
         <Text style={styles.title}>Sign up</Text>
 
         <View style={styles.inputRow}>
-          <MaterialCommunityIcons name="account-outline" size={20} color="#9A9A9A" />
+          <MaterialCommunityIcons
+            name="account-outline"
+            size={20}
+            color="#9A9A9A"
+          />
           <TextInput
             style={styles.textInput}
             placeholder="Full Name"
@@ -93,7 +105,11 @@ export default function Registration() {
         </View>
 
         <View style={[styles.inputRow, { marginTop: 12 }]}>
-          <MaterialCommunityIcons name="account-outline" size={20} color="#9A9A9A" />
+          <MaterialCommunityIcons
+            name="account-outline"
+            size={20}
+            color="#9A9A9A"
+          />
           <TextInput
             style={styles.textInput}
             placeholder="Username"
@@ -105,7 +121,11 @@ export default function Registration() {
         </View>
 
         <View style={[styles.inputRow, { marginTop: 12 }]}>
-          <MaterialCommunityIcons name="email-outline" size={20} color="#9A9A9A" />
+          <MaterialCommunityIcons
+            name="email-outline"
+            size={20}
+            color="#9A9A9A"
+          />
           <TextInput
             style={styles.textInput}
             placeholder="Email"
@@ -127,8 +147,14 @@ export default function Registration() {
             value={password}
             onChangeText={setPassword}
           />
+
+          {/* toggles password visibility */}
           <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-            <Feather name={showPassword ? "eye" : "eye-off"} size={20} color="#9A9A9A" />
+            <Feather
+              name={showPassword ? "eye" : "eye-off"}
+              size={20}
+              color="#9A9A9A"
+            />
           </TouchableOpacity>
         </View>
 

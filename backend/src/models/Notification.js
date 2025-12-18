@@ -1,15 +1,18 @@
+// backend/src/models/Notification.js
+// Notification schema for student notifications
+
 import mongoose from "mongoose";
 
-const notificationSchema = new mongoose.Schema(
+// notification schema definition
+const NotificationSchema = new mongoose.Schema(
   {
-    title: { type: String, required: true },
-    message: { type: String, default: "" },
-    type: { type: String, default: "info" }, // "new", "closed", etc.
+    title: String,
+    message: String,
     date: { type: Date, default: Date.now },
   },
-  { timestamps: true }
+  {
+    timestamps: true, // adds createdAt and updatedAt
+  }
 );
 
-const Notification = mongoose.model("Notification", notificationSchema);
-
-export default Notification;
+export default mongoose.model("Notification", NotificationSchema);

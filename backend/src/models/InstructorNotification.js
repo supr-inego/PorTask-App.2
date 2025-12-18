@@ -1,18 +1,21 @@
+// backend/src/models/InstructorNotification.js
+// Notification schema for instructor notifications
+
 import mongoose from "mongoose";
 
-const instructorNotificationSchema = new mongoose.Schema(
+// instructor notification schema
+const InstructorNotificationSchema = new mongoose.Schema(
   {
-    title: { type: String, required: true },
-    message: { type: String, default: "" },
-    type: { type: String, default: "info" },
+    title: String,
+    message: String,
     date: { type: Date, default: Date.now },
   },
-  { timestamps: true }
+  {
+    timestamps: true, // adds createdAt and updatedAt
+  }
 );
 
-const InstructorNotification = mongoose.model(
+export default mongoose.model(
   "InstructorNotification",
-  instructorNotificationSchema
+  InstructorNotificationSchema
 );
-
-export default InstructorNotification;
