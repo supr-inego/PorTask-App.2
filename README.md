@@ -130,12 +130,12 @@ npm run dev
 
 Create a `.env` file:
 
----
+```
 PORT=3001
 MONGO_URI=mongodb+srv://cyrildayak03_db_user:PkDinT96hRTiY0B4@cluster0.v8iargf.mongodb.net/PorTask-App_db?appName=Cluster0
 JWT_SECRET=1vfzevuapiDfoJe3KoRuGq8xrrOUBO00clW88TULVGE=
 
----
+```
 
 ### 2️⃣ Mobile App Setup
 
